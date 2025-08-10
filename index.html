@@ -1,0 +1,126 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Labubu Game</title>
+<style>
+  body {
+    margin: 0;
+    overflow: hidden;
+    background: #cceeff;
+    touch-action: none;
+  }
+  canvas {
+    display: block;
+  }
+  #controls {
+    position: fixed;
+    bottom: 10px;
+    left: 0;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+  }
+  button {
+    font-size: 20px;
+    padding: 20px;
+    border: none;
+    border-radius: 10px;
+    background: #ff99cc;
+  }
+</style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<div id="controls">
+  <button id="jumpBtn">⬆ Jump</button>
+</div>
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+let width = window.innerWidth;
+let height = window.innerHeight;
+canvas.width = width;
+canvas.height = height;
+
+// Player
+let player = { x: 50, y: height - 150, size: 50, color: 'pink', dy: 0, jumpPower: -15, gravity: 0.8, onGround: true };
+
+// Obstacles
+let obstacles = [];
+let obstacleTimer = 0;
+let score = 0;
+
+function spawnObstacle() {
+  const size = 50;
+  obstacles.push({ x: width, y: height - 150, size: size, color: 'red' });
+}
+
+function update() {
+  ctx.clearRect(0, 0, width, height);
+
+  // Player physics
+  player.y += player.dy;
+  player.dy += player.gravity;
+  if (player.y + player.size >= height - 100) {
+    player.y = height - 100 - player.size;
+    player.dy = 0;
+    player.onGround = true;
+  }
+
+  // Draw player
+  ctx.fillStyle = player.color;
+  ctx.fillRect(player.x, player.y, player.size, player.size);
+
+  // Obstacles movement
+  for (let i = obstacles.length - 1; i >= 0; i--) {
+    let ob = obstacles[i];
+    ob.x -= 8;
+    ctx.fillStyle = ob.color;
+    ctx.fillRect(ob.x, ob.y, ob.size, ob.size);
+
+    // Collision detection
+    if (ob.x < player.x + player.size && ob.x + ob.size > player.x &&
+        ob.y < player.y + player.size && ob.y + ob.size > player.y) {
+      alert('Game Over! Score: ' + score);
+      document.location.reload();
+    }
+
+    if (ob.x + ob.size < 0) {
+      obstacles.splice(i, 1);
+      score++;
+    }
+  }
+
+  // Spawn obstacles
+  obstacleTimer++;
+  if (obstacleTimer > 90) {
+    spawnObstacle();
+    obstacleTimer = 0;
+  }
+
+  // Draw score
+  ctx.fillStyle = 'black';
+  ctx.font = '24px Arial';
+  ctx.fillText('Score: ' + score, 20, 40);
+
+  requestAnimationFrame(update);
+}
+
+function jump() {
+  if (player.onGround) {
+    player.dy = player.jumpPower;
+    player.onGround = false;
+  }
+}
+
+document.getElementById('jumpBtn').addEventListener('click', jump);
+document.addEventListener('keydown', e => { if (e.code === 'Space' || e.code === 'ArrowUp') jump(); });
+
+update();
+</script>
+</body>
+</html>
