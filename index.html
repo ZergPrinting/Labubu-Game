@@ -1,237 +1,126 @@
-<!doctype html>
-<html lang="bg">
+
+<!DOCTYPE html>
+<html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Labubu Runner — локална игра</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Labubu Game</title>
 <style>
-  :root{--bg:#fff8f0;--ground:#3b3b3b;--labubu:#ff7fbf;--text:#222}
-  html,body{height:100%;margin:0;font-family:Inter,system-ui,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text)}
-  .wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:12px;padding:12px;box-sizing:border-box}
-  canvas{background:linear-gradient(#fff,#fff8f0);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,0.12)}
-  .hud{display:flex;gap:12px;align-items:center;font-size:14px}
-  .btn{background:#fff;border:1px solid #ddd;padding:8px 12px;border-radius:8px;cursor:pointer}
-  .small{font-size:13px;color:#555}
-  footer{font-size:13px;color:#666;margin-top:6px}
-  .levelBox{background:#fff;padding:8px;border-radius:8px;border:1px solid #eee}
-  @media (max-width:640px){ canvas{width:92vw;height:40vh} }
+  body {
+    margin: 0;
+    overflow: hidden;
+    background: #cceeff;
+    touch-action: none;
+  }
+  canvas {
+    display: block;
+  }
+  #controls {
+    position: fixed;
+    bottom: 10px;
+    left: 0;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+  }
+  button {
+    font-size: 20px;
+    padding: 20px;
+    border: none;
+    border-radius: 10px;
+    background: #ff99cc;
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
-  <h2>Labubu Runner — нивa и забележителности</h2>
-  <div class="hud">
-    <div>Управление: <strong>Space</strong> — скок, <strong>↓</strong> — приклякни, <strong>R</strong> — рестарт</div>
-    <button class="btn" id="restartBtn">Рестарт</button>
-  </div>
-  <div class="levelBox" id="levelInfo">Ниво 1 • Държава: Vatican City • Забележителност: ⛪ St. Peter's Basilica</div>
-  <canvas id="game" width="900" height="220" aria-label="Labubu игра"></canvas>
-  <div class="small">Препятствия: ❤️ 🌸 🍳 🐶 🧍 🚗 🚲 🛴  — накрая на всяко ниво срещаш забележителност (emoji и име).</div>
-  <footer>Генерирано от ChatGPT — отвори файла локално в браузер.</footer>
+<canvas id="gameCanvas"></canvas>
+<div id="controls">
+  <button id="jumpBtn">⬆ Jump</button>
 </div>
-
 <script>
-(() => {
-  const canvas = document.getElementById('game');
-  const ctx = canvas.getContext('2d');
-  let width = canvas.width, height = canvas.height;
-  const groundY = height - 50;
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+let width = window.innerWidth;
+let height = window.innerHeight;
+canvas.width = width;
+canvas.height = height;
 
-  // Levels ordered by country area (small → larger). Data source: public country area lists.
-  const levels = [
-    {country:'Vatican City', landmark:'⛪ St. Peter\'s Basilica'},
-    {country:'Monaco', landmark:'🎰 Monte Carlo Casino'},
-    {country:'Nauru', landmark:'🌊 Anibare Bay'},
-    {country:'Tuvalu', landmark:'🏝️ Funafuti Atoll'},
-    {country:'San Marino', landmark:'🏰 Three Towers of San Marino'},
-    {country:'Liechtenstein', landmark:'🏰 Vaduz Castle'},
-    {country:'Marshall Islands', landmark:'🌴 Bikini Atoll'},
-    {country:'Saint Kitts and Nevis', landmark:'🌴 Brimstone Hill Fortress'},
-    {country:'Maldives', landmark:'🏝️ Malé Atoll'},
-    {country:'Malta', landmark:'🏛️ Ġgantija Temples'}
-  ];
+// Player
+let player = { x: 50, y: height - 150, size: 50, color: 'pink', dy: 0, jumpPower: -15, gravity: 0.8, onGround: true };
 
-  let curLevel = 0;
+// Obstacles
+let obstacles = [];
+let obstacleTimer = 0;
+let score = 0;
 
-  // Player (Labubu) representation
-  const player = { x:60, y:0, w:52, h:52, vy:0, onGround:true, duck:false };
+function spawnObstacle() {
+  const size = 50;
+  obstacles.push({ x: width, y: height - 150, size: size, color: 'red' });
+}
 
-  let running = true, score = 0, speed = 6;
-  let obstacles = [], spawnTimer = 0, spawnInterval = 90;
+function update() {
+  ctx.clearRect(0, 0, width, height);
 
-  const obstacleEmojis = ['❤️','🌸','🍳','🐶','🧍','🚗','🚲','🛴'];
-
-  function resetLevel(){
-    obstacles = [];
-    spawnTimer = 0;
-    score = 0;
-    speed = 6;
-    player.y = groundY - player.h;
-    player.vy = 0;
+  // Player physics
+  player.y += player.dy;
+  player.dy += player.gravity;
+  if (player.y + player.size >= height - 100) {
+    player.y = height - 100 - player.size;
+    player.dy = 0;
     player.onGround = true;
-    player.duck = false;
-    running = true;
-    document.getElementById('levelInfo').innerText = 'Ниво ' + (curLevel+1) + ' • Държава: ' + levels[curLevel].country + ' • Забележителност: ' + levels[curLevel].landmark;
   }
 
-  function spawnObstacle(){
-    // pick random emoji obstacle from list, with variety depending on level
-    const i = Math.floor(Math.random()*obstacleEmojis.length);
-    const em = obstacleEmojis[i];
-    const type = Math.random() < 0.25 ? 'flying' : 'ground';
-    const w = 28 + Math.round(Math.random()*32);
-    const h = 28 + Math.round(Math.random()*24);
-    const y = type === 'ground' ? groundY - h : groundY - 120 - Math.round(Math.random()*40);
-    obstacles.push({x: width + 40, y, w, h, emoji: em, type});
-  }
+  // Draw player
+  ctx.fillStyle = player.color;
+  ctx.fillRect(player.x, player.y, player.size, player.size);
 
-  function update(){
-    if(!running) return;
-    // physics
-    if(!player.onGround){ player.vy += 0.8; player.y += player.vy;
-      if(player.y >= groundY - (player.duck ? player.h/2 : player.h)){ player.y = groundY - player.h; player.vy = 0; player.onGround = true; }
-    }
-    player.duck = keys.down && player.onGround;
-    const ph = player.duck ? player.h/2 : player.h;
+  // Obstacles movement
+  for (let i = obstacles.length - 1; i >= 0; i--) {
+    let ob = obstacles[i];
+    ob.x -= 8;
+    ctx.fillStyle = ob.color;
+    ctx.fillRect(ob.x, ob.y, ob.size, ob.size);
 
-    // obstacles move
-    for(let i=obstacles.length-1;i>=0;i--){
-      obstacles[i].x -= speed;
-      if(obstacles[i].x + obstacles[i].w < -50){ obstacles.splice(i,1); score++; if(score % 8 === 0) speed += 0.6; }
+    // Collision detection
+    if (ob.x < player.x + player.size && ob.x + ob.size > player.x &&
+        ob.y < player.y + player.size && ob.y + ob.size > player.y) {
+      alert('Game Over! Score: ' + score);
+      document.location.reload();
     }
 
-    // spawn logic: faster spawns in higher levels
-    spawnTimer++;
-    const base = Math.max(50, 110 - curLevel*6);
-    if(spawnTimer > base + Math.round(Math.random()*60)){ spawnObstacle(); spawnTimer=0; }
-
-    // collision check
-    for(const ob of obstacles){
-      const px=player.x, py=player.y, pw=player.w, phh=ph;
-      const ox=ob.x, oy=ob.y, ow=ob.w, oh=ob.h;
-      if(px < ox+ow && px+pw > ox && py < oy+oh && py+phh > oy){
-        // collision: end level (lose)
-        running = false;
-      }
-    }
-
-    // level complete condition: reach score threshold per level
-    const needed = 12 + curLevel*6;
-    if(score >= needed){
-      // level boss/landmark appears as big obstacle; touch it to finish level
-      if(!obstacles.find(o=>o.boss)){
-        // spawn boss landmark
-        const bossEmoji = levels[curLevel].landmark.split(' ')[0]; // first emoji or char
-        obstacles.push({x: width + 50, y: groundY - 80, w: 80, h: 80, emoji: bossEmoji, boss:true, type:'boss'});
-      } else {
-        // move boss faster
-        for(const o of obstacles) if(o.boss) o.x -= speed*0.8;
-        // if boss crosses player's x -> level complete
-        const boss = obstacles.find(o=>o.boss);
-        if(boss && boss.x + boss.w < 0){
-          // advance level
-          running = false;
-          // small delay then advance
-          setTimeout(()=>{
-            curLevel++;
-            if(curLevel >= levels.length){ showVictory(); } else { resetLevel(); }
-          }, 600);
-        }
-      }
+    if (ob.x + ob.size < 0) {
+      obstacles.splice(i, 1);
+      score++;
     }
   }
 
-  function showVictory(){
-    // show end screen
-    ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0,0,width,height);
-    ctx.fillStyle = '#fff'; ctx.textAlign='center'; ctx.font='28px Inter, Arial'; ctx.fillText('Поздравления! Завърши всички нива 🎉', width/2, height/2);
+  // Spawn obstacles
+  obstacleTimer++;
+  if (obstacleTimer > 90) {
+    spawnObstacle();
+    obstacleTimer = 0;
   }
 
-  function draw(){
-    ctx.clearRect(0,0,width,height);
-    // sky
-    const g = ctx.createLinearGradient(0,0,0,height);
-    g.addColorStop(0,'#fff7fb'); g.addColorStop(1,'#fff8f0');
-    ctx.fillStyle = g; ctx.fillRect(0,0,width,height);
+  // Draw score
+  ctx.fillStyle = 'black';
+  ctx.font = '24px Arial';
+  ctx.fillText('Score: ' + score, 20, 40);
 
-    // ground
-    ctx.fillStyle = '#eee'; ctx.fillRect(0, groundY, width, height-groundY);
-    ctx.fillStyle = '#bbb'; ctx.fillRect(0, groundY+30, width, 4);
+  requestAnimationFrame(update);
+}
 
-    // draw player (labubu) as a cute blob with "labubu" text
-    ctx.save();
-    ctx.fillStyle = 'var(--labubu)'; // pink blob
-    const ph = player.duck ? player.h/2 : player.h;
-    const py = player.y + (player.h - ph);
-    roundRect(ctx, player.x, py, player.w, ph, 10);
-    ctx.fill();
-    // eyes and mouth
-    ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(player.x+14, py+ph*0.3, 3,0,Math.PI*2); ctx.fill();
-    ctx.beginPath(); ctx.arc(player.x+34, py+ph*0.3, 3,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle='#fff'; ctx.font='12px Inter, Arial'; ctx.fillText('labubu', player.x+6, py+ph-8);
-    ctx.restore();
-
-    // obstacles (draw emoji inside boxes)
-    ctx.font = '28px serif';
-    for(const ob of obstacles){
-      ctx.save();
-      ctx.fillStyle = ob.boss ? '#333' : '#ff6b6b';
-      roundRect(ctx, ob.x, ob.y, ob.w, ob.h, 8);
-      ctx.fill();
-      // draw emoji
-      ctx.fillStyle = '#fff';
-      ctx.font = ob.boss ? '38px serif' : '26px serif';
-      ctx.textAlign = 'center'; ctx.textBaseline='middle';
-      ctx.fillText(ob.emoji, ob.x + ob.w/2, ob.y + ob.h/2 + (ob.boss?6:0));
-      ctx.restore();
-    }
-
-    // HUD
-    ctx.fillStyle = '#333'; ctx.font='18px Inter, Arial'; ctx.textAlign='left';
-    ctx.fillText('Ниво: ' + (curLevel+1) + '/' + levels.length, 12, 22);
-    ctx.fillText('Точки: ' + score, 12, 44);
-    ctx.fillText('Държава: ' + levels[curLevel].country, 12, 66);
-
-    if(!running){
-      ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(0,0,width,height);
-      ctx.fillStyle='#fff'; ctx.textAlign='center'; ctx.font='26px Inter, Arial';
-      ctx.fillText('Сблъска се! Натисни R за рестарт', width/2, height/2 - 6);
-      ctx.textAlign='left';
-    }
+function jump() {
+  if (player.onGround) {
+    player.dy = player.jumpPower;
+    player.onGround = false;
   }
+}
 
-  function roundRect(ctx,x,y,w,h,r){
-    ctx.beginPath();
-    ctx.moveTo(x+r,y);
-    ctx.arcTo(x+w,y,x+w,y+h,r);
-    ctx.arcTo(x+w,y+h,x,y+h,r);
-    ctx.arcTo(x,y+h,x,y,r);
-    ctx.arcTo(x,y,x+w,y,r);
-    ctx.closePath();
-  }
+document.getElementById('jumpBtn').addEventListener('click', jump);
+document.addEventListener('keydown', e => { if (e.code === 'Space' || e.code === 'ArrowUp') jump(); });
 
-  // main loop
-  function loop(){ update(); draw(); requestAnimationFrame(loop); }
-  requestAnimationFrame(loop);
-
-  // input
-  const keys = { down:false };
-  window.addEventListener('keydown', (e)=>{
-    if(e.code==='Space'){ e.preventDefault(); if(running && player.onGround){ player.vy = -12; player.onGround=false; } }
-    else if(e.key==='ArrowDown'){ keys.down=true; }
-    else if(e.key==='r' || e.key==='R'){ resetLevel(); }
-  });
-  window.addEventListener('keyup', (e)=>{ if(e.key==='ArrowDown') keys.down=false; });
-
-  canvas.addEventListener('touchstart', (e)=>{ e.preventDefault(); if(running && player.onGround){ player.vy=-12; player.onGround=false; } }, {passive:false});
-  canvas.addEventListener('mousedown', ()=>{ if(running && player.onGround){ player.vy=-12; player.onGround=false; } });
-
-  document.getElementById('restartBtn').addEventListener('click', ()=>resetLevel());
-  // init
-  function adapt(){ const dpr = window.devicePixelRatio||1; canvas.width = 900*dpr; canvas.height = 220*dpr; canvas.style.width='900px'; canvas.style.height='220px'; ctx.setTransform(dpr,0,0,dpr,0,0); }
-  window.addEventListener('resize', adapt); adapt();
-  resetLevel();
-
-})();</script>
+update();
+</script>
 </body>
 </html>
